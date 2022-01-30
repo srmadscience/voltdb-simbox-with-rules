@@ -24,6 +24,7 @@ DROP table device_table IF EXISTS;
 DROP table device_cell_history IF EXISTS;
 DROP table device_incoming_call_history IF EXISTS;
 DROP table device_outgoing_call_history IF EXISTS;
+DROP TABLE volt_rules IF EXISTS;
 
 DROP FUNCTION add_new_cell  IF EXISTS;
 DROP FUNCTION get_last_n_cells  IF EXISTS;

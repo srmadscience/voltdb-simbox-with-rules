@@ -1,8 +1,23 @@
 
 
+load classes ../../voltdb-rules/jars/voltdb-rules.jar;
 load classes ../jars/voltdb-simbox.jar;
 
 file -inlinebatch END_OF_BATCH
+
+
+CREATE TABLE volt_rules
+(RULESET_NAME varchar(30) not null
+,SEQNO bigint not null
+,ISAND tinyint not null
+,STACK_NAME varchar(80) not null
+,RULE_FIELD varchar(80) not null
+,RULE_OPERATOR varchar(2) not null
+,THRESHOLD_FLOAT float 
+,THRESHOLD_STRING  varchar(256) 
+,THRESHOLD_EXPRESSION  varchar(256) 
+,primary key (RULESET_NAME, SEQNO));
+
 
 CREATE FUNCTION add_new_cell FROM METHOD simbox.CellHistoryAsStringWrangler.addNewCell;
 
@@ -16,7 +31,7 @@ CREATE TABLE simbox_parameters
 ,parameter_value bigint not null);
 
 CREATE TABLE simbox_stats
-(stat_name varchar(80) not null primary key
+(stat_name varchar(1024) not null primary key
 ,stat_value bigint not null);
 
 CREATE table cell_table
@@ -52,7 +67,7 @@ CREATE table device_table
 ,cell_history_as_string varchar(120) not null
 ,cell_history_as_string_last3 varchar(120) not null
 ,cell_history_as_string_last6 varchar(120) not null
-,suspicious_because varchar(120)
+,suspicious_because varchar(1024)
 ,suspicious_value bigint
 );
 
@@ -266,6 +281,75 @@ UPSERT INTO simbox_stats VALUES ('suspicious_because_suspiciously_moving_device'
 UPSERT INTO simbox_stats VALUES ('suspicious_because_all_incoming_calls_from_known_bad_numbers',0);
 UPSERT INTO simbox_stats VALUES ('suspicious_because_total_incoming_outgoing_ratio_bad',0);
 UPSERT INTO simbox_stats VALUES ('suspicious_because_topn_incoming_outgoing_ratio_bad',0);                                                                                                          
+
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',1,1,'all_incoming_calls_from_known_bad_numbers', 'thisDeviceIsSuspicious','=',1,null,null);
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',2,1,'all_incoming_calls_from_known_bad_numbers', 'actualBusyInCallPct','>=',1,null,null);
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',3,1,'all_incoming_calls_from_known_bad_numbers', 'actualBusyInCallSuspicuousPct','=',null,null,'actualBusyInCallPct');
+
+
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',21,1,'some_incoming_calls_from_known_bad_numbers', 'thisDeviceIsSuspicious','=',1,null,null);
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',22,1,'some_incoming_calls_from_known_bad_numbers', 'actualBusyInCallSuspicuousPct','>',1,null,null);
+
+
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',31,1,'suspicious_device_has_no_incoming_calls', 'thisDeviceIsSuspicious','=',1,null,null);
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',32,1,'suspicious_device_has_no_incoming_calls', 'incomingCallCount','=',0,null,null);
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',33,1,'suspicious_device_has_no_incoming_calls', 'outgoingCallCount','>',0,null,null);
+
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',41,1,'suspiciously_moving_device', 'thisDeviceIsSuspicious','=',1,null,null);
+
+
+
+
+
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',51,1,'total_incoming_outgoing_ratio_bad', 'actualBusynessPercentage','>=',null,null,'busynessPercentage');
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',52,1,'total_incoming_outgoing_ratio_bad', 'outgoingIncomingRatioTrip','<',null,null,'outgoingCallCount');
+
+
+
+
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',61,1,'topn_incoming_outgoing_ratio_bad', 'actualBusynessPercentage','>=',null,null,'busynessPercentage');
+
+INSERT INTO volt_rules
+VALUES
+('SIMBOX',62,1,'topn_incoming_outgoing_ratio_bad', 'outCallTopBottomNRatio','<',null,null,'topBottomNRatio');
+
+
 
 
 

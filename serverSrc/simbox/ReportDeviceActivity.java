@@ -24,6 +24,7 @@ package simbox;
  */
 
 import java.util.Date;
+import java.util.HashMap;
 
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2019 VoltDB Inc.
@@ -52,6 +53,9 @@ import org.voltdb.SQLStmt;
 import org.voltdb.VoltProcedure;
 import org.voltdb.VoltTable;
 import org.voltdb.types.TimestampType;
+
+import rules.BadRuleException;
+import rules.RuleSet;
 
 public class ReportDeviceActivity extends VoltProcedure {
 
@@ -165,12 +169,24 @@ public class ReportDeviceActivity extends VoltProcedure {
             + "SET suspicious_because = null"
             + "  , suspicious_value = null "
             + "WHERE device_id = ?;");
+    
+    public static final SQLStmt getRules = new SQLStmt(RuleSet.GET_RULE_SET);
 
 
 	// @formatter:on
+    
+    RuleSet rs = null;
 
     public VoltTable[] run(long deviceId, TimestampType startTime, int durationSeconds, String inOrOut,
             long otherNumber, String status) throws VoltAbortException {
+        
+        if (rs == null || rs.expired(getTransactionTime())) {
+            try {
+                rs = createRuleSet("SIMBOX");
+            } catch (BadRuleException e) {
+                throw new VoltAbortException("BadRuleException:"+e.getMessage());
+            }
+        }
 
         // Note what's changed...
         updateDatabaseTablesForDevice(deviceId, startTime, durationSeconds, inOrOut, otherNumber, status);
@@ -180,6 +196,19 @@ public class ReportDeviceActivity extends VoltProcedure {
 
         return voltExecuteSQL(true);
     }
+
+    private RuleSet createRuleSet(String ruleSetName) throws BadRuleException {
+        
+        final Date expiryDate = new Date(getTransactionTime().getTime() + 60000);
+        
+        voltQueueSQL(getRules, ruleSetName);
+
+        VoltTable ruleTable = voltExecuteSQL()[0];
+        
+        RuleSet rs = new RuleSet(ruleSetName,ruleTable,expiryDate);
+        
+        return rs;
+   }
 
     /**
      * Record the fact that a call has happened.
@@ -235,10 +264,14 @@ public class ReportDeviceActivity extends VoltProcedure {
      * @param inOrOut
      * @param otherNumber
      * @param status
+     * @throws BadRuleException 
      */
     @SuppressWarnings("unused")
     private void seeIfDeviceIsSuspect(long deviceId, TimestampType startTime, int durationSeconds, String inOrOut,
-            long otherNumber, String status) {
+            long otherNumber, String status)  {
+        
+        HashMap<String, Double> theNumericValues = new  HashMap<String, Double>();
+        HashMap<String, String> theStringValues = new HashMap<String, String>();
 
         // These parameters affect the decision making logic.
         voltQueueSQL(getParameter, "OUTGOING_CALL_ONLY_COUNT");
@@ -263,6 +296,7 @@ public class ReportDeviceActivity extends VoltProcedure {
         final long hoursBackToCheck = getParameter(3, firstResults[5]);
         final long topN = getParameter(5, firstResults[6]);
         final long topBottomNRatio = getParameter(10, firstResults[7]);
+        
 
         VoltTable device = firstResults[8];
         device.advanceRow();
@@ -316,46 +350,86 @@ public class ReportDeviceActivity extends VoltProcedure {
             long actualBusyInCallSuspicuousPct = getActualBusyInCallSuspiciousPct(secondResults[3]);
 
             long outCallTopBottomNRatio = getTopNRatio(secondResults[4], (int) topN);
-
-            // Decide what kind of device this is...
-            if (thisDeviceIsSuspicious // Known suspicious number
-                    && actualBusyInCallPct >= 1 // We have incoming calls..
-                    && actualBusyInCallSuspicuousPct == actualBusyInCallPct) // All of them are from bad numbers
-            {
-
-                voltQueueSQL(flagDevice, "all_incoming_calls_from_known_bad_numbers", actualBusyInCallSuspicuousPct,
-                        deviceId);
-
-            } else if (thisDeviceIsSuspicious && // Known suspicious number
-                    actualBusyInCallSuspicuousPct > 1) { // At least one call from a bad number
-
-                voltQueueSQL(flagDevice, "some_incoming_calls_from_known_bad_numbers", actualBusyInCallSuspicuousPct,
-                        deviceId);
-
-            } else if (thisDeviceIsSuspicious // Known suspicious number
-                    && incomingCallCount == 0 // no incoming calls
-                    && outgoingCallCount > 0 // some outgoing calls
-            ) {
-                voltQueueSQL(flagDevice, "suspicious_device_has_no_incoming_calls", actualBusyOutCallPct, deviceId);
-
-            } else if (thisDeviceIsSuspicious) { // Device is part of a group that have all moved together >= 6 times
-
-                voltQueueSQL(flagDevice, "suspiciously_moving_device", actualBusyOutCallPct, deviceId);
-
-            } else if ((actualBusyInCallPct + actualBusyOutCallPct) >= busynessPercentage // We're very busy
-                    && (outgoingIncoming * incomingCallCount) < outgoingCallCount) { // Lots of calls out
-
-                voltQueueSQL(flagDevice, "total_incoming_outgoing_ratio_bad",
-                        actualBusyInCallPct + actualBusyOutCallPct, deviceId);
-
-            } else if ((actualBusyInCallPct + actualBusyOutCallPct) >= busynessPercentage // We're very busy
-                    && outCallTopBottomNRatio < topBottomNRatio) { // Lots of calls out
-
-                voltQueueSQL(flagDevice, "topn_incoming_outgoing_ratio_bad", outCallTopBottomNRatio, deviceId);
-
-            } else {
-                voltQueueSQL(clearDevice, deviceId);
+            
+            
+            
+            
+            theNumericValues.put("thisDeviceIsSuspicious", (double) 0);
+            
+            if (thisDeviceIsSuspicious) {
+                theNumericValues.put("thisDeviceIsSuspicious", (double) 1);
             }
+
+
+            theNumericValues.put("actualBusyInCallPct", (double) actualBusyInCallPct);
+            theNumericValues.put("actualBusyInCallSuspicuousPct", (double) actualBusyInCallSuspicuousPct);  
+            
+            theNumericValues.put("incomingCallCount", (double) incomingCallCount);  
+            theNumericValues.put("outgoingCallCount", (double) outgoingCallCount);  
+            
+            theNumericValues.put("busynessPercentage", (double) busynessPercentage);  
+            theNumericValues.put("actualBusynessPercentage", (double) (actualBusyInCallPct + actualBusyOutCallPct));  
+            theNumericValues.put("outgoingIncomingRatioTrip", (double) (outgoingIncoming * incomingCallCount));  
+ 
+            theNumericValues.put("outCallTopBottomNRatio", (double) outCallTopBottomNRatio);              
+            theNumericValues.put("topBottomNRatio", (double) topBottomNRatio);  
+            
+            try {
+                String ruleTripped = rs.evaluate(theNumericValues, theStringValues);
+                
+                if (ruleTripped != null) {
+                    System.out.println(ruleTripped);
+                    voltQueueSQL(flagDevice, ruleTripped, 42,
+                            deviceId);
+                } else {
+                    voltQueueSQL(clearDevice, deviceId);
+                }
+                
+            } catch (BadRuleException e) {
+                System.out.println(rs.toString() + " " + e.getMessage());
+                throw new VoltAbortException("BadRuleException:"+e.getMessage());
+            }
+            
+
+//            // Decide what kind of device this is...
+//            if (thisDeviceIsSuspicious // Known suspicious number
+//                    && actualBusyInCallPct >= 1 // We have incoming calls..
+//                    && actualBusyInCallSuspicuousPct == actualBusyInCallPct) // All of them are from bad numbers
+//            {
+//
+//                voltQueueSQL(flagDevice, "all_incoming_calls_from_known_bad_numbers", actualBusyInCallSuspicuousPct,
+//                        deviceId);
+//
+//            } else if (thisDeviceIsSuspicious && // Known suspicious number
+//                    actualBusyInCallSuspicuousPct > 1) { // At least one call from a bad number
+//
+//                voltQueueSQL(flagDevice, "some_incoming_calls_from_known_bad_numbers", actualBusyInCallSuspicuousPct,
+//                        deviceId);
+//
+//            } else if (thisDeviceIsSuspicious // Known suspicious number
+//                    && incomingCallCount == 0 // no incoming calls
+//                    && outgoingCallCount > 0 // some outgoing calls
+//            ) {
+//                voltQueueSQL(flagDevice, "suspicious_device_has_no_incoming_calls", actualBusyOutCallPct, deviceId);
+//
+//            } else if (thisDeviceIsSuspicious) { // Device is part of a group that have all moved together >= 6 times
+//
+//                voltQueueSQL(flagDevice, "suspiciously_moving_device", actualBusyOutCallPct, deviceId);
+//
+//            } else if ((actualBusyInCallPct + actualBusyOutCallPct) >= busynessPercentage // We're very busy
+//                    && (outgoingIncoming * incomingCallCount) < outgoingCallCount) { // Lots of calls out
+//
+//                voltQueueSQL(flagDevice, "total_incoming_outgoing_ratio_bad",
+//                        actualBusyInCallPct + actualBusyOutCallPct, deviceId);
+//
+//            } else if ((actualBusyInCallPct + actualBusyOutCallPct) >= busynessPercentage // We're very busy
+//                    && outCallTopBottomNRatio < topBottomNRatio) { // Lots of calls out
+//
+//                voltQueueSQL(flagDevice, "topn_incoming_outgoing_ratio_bad", outCallTopBottomNRatio, deviceId);
+//
+//            } else {
+//                voltQueueSQL(clearDevice, deviceId);
+//            }
 
         }
 

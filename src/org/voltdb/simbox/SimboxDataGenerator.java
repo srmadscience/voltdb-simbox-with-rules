@@ -600,8 +600,7 @@ public class SimboxDataGenerator {
     private static void reportStat(String statName, long statValue, Client c)
             throws NoConnectionsException, IOException, ProcCallException {
 
-        c.callProcedure("@AdHoc", "UPSERT INTO simbox_stats " + "(stat_name, stat_value) " + "VALUES ('" + statName
-                + "'," + statValue + ");");
+        c.callProcedure("simbox_stats.UPSERT",  statName, statValue );
 
     }
 
