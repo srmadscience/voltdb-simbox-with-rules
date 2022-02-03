@@ -1,6 +1,6 @@
 
 
-load classes ../../voltdb-rules/jars/voltdb-rules.jar;
+load classes ../jars/voltdb-rules.jar;
 load classes ../jars/voltdb-simbox.jar;
 
 file -inlinebatch END_OF_BATCH
