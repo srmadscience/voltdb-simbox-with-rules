@@ -1,7 +1,5 @@
-package org.voltdb.simbox;
-
 /* This file is part of VoltDB.
- * Copyright (C) 2008-2021 VoltDB Inc.
+ * Copyright (C) 2008-2022 VoltDB Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -23,6 +21,7 @@ package org.voltdb.simbox;
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+package org.voltdb.simbox;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
