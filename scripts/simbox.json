@@ -1216,6 +1216,6 @@
   "timepicker": {},
   "timezone": "",
   "title": "Simbox",
-  "uid": "voltdb-simbox",
+  "uid": "voltdb-simbox-with-rules",
   "version": 8
 }
