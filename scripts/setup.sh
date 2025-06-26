@@ -3,7 +3,7 @@
 cd /home/ubuntu
 . ./.profile
 
-cd voltdb-simbox/scripts
+cd voltdb-simbox-with-rules/scripts
 
 sqlcmd --servers=$1 < ../ddl/create_db.sql
 
